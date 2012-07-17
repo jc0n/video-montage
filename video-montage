@@ -4,8 +4,9 @@ import argparse
 import os
 import os.path
 import re
-import subprocess
 import shutil
+import subprocess
+import sys
 import tempfile
 
 from collections import namedtuple
@@ -13,6 +14,10 @@ from datetime import timedelta
 from multiprocessing.pool import ThreadPool
 
 from which import which, CommandNotFoundException
+
+#TODO: add error handling
+#TODO: add abilty to specify directories
+#TODO: replace print to stdout with proper logging
 
 __author__ = 'John O\'Connor'
 __version__ = '0.1'
@@ -28,6 +33,12 @@ ffmpeg_cmd = command('ffmpeg')
 ffprobe_cmd = command('ffprobe')
 montage_cmd = command('montage')
 convert_cmd = command('convert')
+
+_VIDEO_EXTENSIONS = frozenset(('3gp', 'asf', 'asx', 'avi', 'axv', 'dif', 'dl',
+                               'dv', 'fli', 'flv', 'gl', 'lsf', 'lsx', 'mkv',
+                               'mng', 'mov', 'movie', 'mp4', 'mpe', 'mpeg',
+                               'mpg', 'mpv', 'mxu', 'ogv', 'qt', 'ts', 'webm',
+                               'wm', 'wmv', 'wmx', 'wvx'))
 
 _VIDEO_RE = re.compile('''
     Duration:\s+(?P<hours>\d{2}):
@@ -45,8 +56,16 @@ class VideoMontager:
 
     def __init__(self, config):
         self.config = config
+        self._pool = ThreadPool()
 
     def start(self):
+        self._process_videos(self.config.video_files)
+
+    def _filter_video_files(self, video_file):
+        name, ext = os.path.splitext(video_file)
+        return ext[1:] in _VIDEO_EXTENSIONS
+
+    def _process_videos(self, video_files):
         if not self.config.tempdir:
             tempdir = tempfile.mkdtemp()
             cleanup = True
@@ -54,24 +73,37 @@ class VideoMontager:
             tempdir = self.config.tempdir
             cleanup = False
 
-        p = ThreadPool()
-
-        for video_file in self.config.video_files:
+        print "Creating tempdir %s" % tempdir
+        video_files = filter(self._filter_video_files, video_files)
+        for video_file in video_files:
             video = self._video(video_file)
-            outdir = self.config.outdir or os.path.dirname(video.filename)
-            outprefix = os.path.join(outdir, video.basename)
             tempprefix = os.path.join(tempdir, video.basename)
-            montage_file = "%s.%s" % (outprefix, self.config.format)
-            if os.path.exists(montage_file):
-                os.remove(montage_file)
+            self._process_video(video, tempprefix)
 
-            thumbnails = self.create_thumbnails(video, tempprefix)
-            p.map(self._resize_thumbnails, thumbnails)
-            self._create_montage(montage_file, thumbnails)
-            self._apply_label(montage_file, video)
-            map(os.remove, thumbnails)
-            if cleanup:
-                shutil.rmtree(tempdir)
+        print "Cleaning up"
+        if cleanup:
+            shutil.rmtree(tempdir)
+
+    def _process_video(self, video, tempprefix):
+        outdir = self.config.outdir or os.path.dirname(video.filename)
+        outprefix = os.path.join(outdir, video.basename)
+        montage_file = "%s.%s" % (outprefix, self.config.format)
+        if os.path.exists(montage_file):
+            if not self.config.overwrite:
+                # TODO: add log entry
+                # montage image file already exists
+                print "Montage Exists. Skipping"
+                return
+            os.remove(montage_file)
+
+        print "Creating thumbnails for %s" % video.basename
+        thumbnails = self.create_thumbnails(video, tempprefix)
+        print "Resizing thumbnails"
+        self._pool.map(self._resize_thumbnail, thumbnails)
+        print "Creating montage %s" % montage_file
+        self._create_montage(montage_file, thumbnails)
+        self._apply_label(montage_file, video)
+        map(os.remove, thumbnails)
 
     def _video(self, video_file):
         ffprobe = ffprobe_cmd('"%s"' % video_file,
@@ -112,7 +144,7 @@ class VideoMontager:
                                         montage_file,
                                         montage_file)).wait()
 
-    def _resize_thumbnails(self, thumbnail):
+    def _resize_thumbnail(self, thumbnail):
         convert = convert_cmd('-quality 100 '
                     '-resize "%d" '
                     '"%s" "%s"' % (
@@ -135,14 +167,13 @@ class VideoMontager:
                                 interval,
                                 vframes,
                                 outprefix,
-                                self.config.format),
-                                        stderr=subprocess.STDOUT)
+                                self.config.format),)
         ffmpeg.wait()
         return ["%s_%03d.%s" % (outprefix, i, self.config.format)
                     for i in range(1, vframes + 1)]
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(description="Create a montage of frames from a video file")
 
     parser.add_argument('video_files', metavar='video_file', nargs='+',
@@ -158,6 +189,9 @@ def main():
             help='Output directory for montage images defaults to same '
                  'directory as the input video file.')
 
+    parser.add_argument('--overwrite', default=False, action='store_true',
+            help='Overwrite existing montage image files.')
+
     parser.add_argument('--start-seconds', '-ss', metavar='N', default=30, type=int,
             help='Start reading from video at specified offset in seconds')
 
@@ -168,9 +202,6 @@ def main():
     parser.add_argument('--tempdir', '-t', metavar='PATH', default=None,
             help='Temporary directory for processing')
 
-    parser.add_argument('--verbose', '-v', default=False, action='store_true',
-            help='Show more verbose logging information')
-
     parser.add_argument('--background-color', '-bg', default='black',
             help='Background color for the montage.')
 
@@ -179,8 +210,10 @@ def main():
         parser.print_help()
         raise SystemExit(1)
 
-    m = VideoMontager(args)
-    m.start()
+    return args
+
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    m = VideoMontager(args)
+    m.start()
