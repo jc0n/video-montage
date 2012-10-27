@@ -1,6 +1,8 @@
-#!/usr/bin/env python
+"""
+VideoMontager is a simple class which provides a wrapper around ffmpeg and
+imagemagic using them to create a montage of frames from specified video files.
+"""
 
-import argparse
 import os
 import os.path
 import re
@@ -20,7 +22,7 @@ from which import which, CommandNotFoundException
 #TODO: replace print to stdout with proper logging
 
 __author__ = 'John O\'Connor'
-__version__ = '0.1'
+__version__ = '0.1.1'
 
 def command(cmd):
     which(cmd)
@@ -171,49 +173,3 @@ class VideoMontager:
         ffmpeg.wait()
         return ["%s_%03d.%s" % (outprefix, i, self.config.format)
                     for i in range(1, vframes + 1)]
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Create a montage of frames from a video file")
-
-    parser.add_argument('video_files', metavar='video_file', nargs='+',
-            help='List video files to montage')
-
-    parser.add_argument('--thumbnails', '-n', metavar='N', default=25, type=int,
-            help='Number of thumbnails to include')
-
-    parser.add_argument('--thumbsize', '-s', metavar='N', default=202, type=int,
-            help='Size of individual thumbnails')
-
-    parser.add_argument('--outdir', '-d', metavar='PATH', default=None,
-            help='Output directory for montage images defaults to same '
-                 'directory as the input video file.')
-
-    parser.add_argument('--overwrite', default=False, action='store_true',
-            help='Overwrite existing montage image files.')
-
-    parser.add_argument('--start-seconds', '-ss', metavar='N', default=30, type=int,
-            help='Start reading from video at specified offset in seconds')
-
-    parser.add_argument('--format', '-f', default='png',
-            choices=('png', 'gif', 'jpg'),
-            help='Output format for montage image')
-
-    parser.add_argument('--tempdir', '-t', metavar='PATH', default=None,
-            help='Temporary directory for processing')
-
-    parser.add_argument('--background-color', '-bg', default='black',
-            help='Background color for the montage.')
-
-    args = parser.parse_args()
-    if not args or args.video_files is None:
-        parser.print_help()
-        raise SystemExit(1)
-
-    return args
-
-
-if __name__ == '__main__':
-    args = parse_args()
-    m = VideoMontager(args)
-    m.start()
