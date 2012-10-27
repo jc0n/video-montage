@@ -1,1 +1,2 @@
+argparse
 git+git://github.com/jc0n/python-which.git#egg=python-which
