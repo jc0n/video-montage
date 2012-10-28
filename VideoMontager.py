@@ -39,11 +39,9 @@ ffprobe_cmd = command('ffprobe')
 montage_cmd = command('montage')
 convert_cmd = command('convert')
 
-_VIDEO_EXTENSIONS = frozenset(('3gp', 'asf', 'asx', 'avi', 'axv', 'dif', 'dl',
-                               'dv', 'fli', 'flv', 'gl', 'lsf', 'lsx', 'mkv',
-                               'mng', 'mov', 'movie', 'mp4', 'mpe', 'mpeg',
-                               'mpg', 'mpv', 'mxu', 'ogv', 'qt', 'ts', 'webm',
-                               'wm', 'wmv', 'wmx', 'wvx'))
+_VIDEO_EXTENSIONS = frozenset(('avi', 'flv', 'mkv', 'mng', 'mov',
+                               'movie', 'mp4', 'mpe', 'mpeg',
+                               'mpg', 'mpv', 'ogv', 'ts', 'wmv'))
 
 _VIDEO_RE = re.compile('''
     Duration:\s+(?P<hours>\d{2}):
