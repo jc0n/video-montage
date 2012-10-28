@@ -20,9 +20,12 @@ from which import which, CommandNotFoundException
 #TODO: add error handling
 #TODO: add abilty to specify directories
 #TODO: replace print to stdout with proper logging
+#TODO: allow silent operation
 
 __author__ = 'John O\'Connor'
-__version__ = '0.1.1'
+__version__ = '0.1.2'
+
+__all__ = ('VideoMontager', )
 
 def command(cmd):
     which(cmd)
@@ -53,21 +56,24 @@ _VIDEO_RE = re.compile('''
     ''', re.VERBOSE | re.DOTALL | re.MULTILINE)
 
 
-class VideoMontager:
-    Video = namedtuple('Video', 'filename basename resolution codec duration fps')
+Video = namedtuple('Video', 'filename basename resolution codec duration fps')
 
+class VideoMontager(object):
+    """
+    VideoMontager Class
+
+    Provides a simple wrapper around ffmpeg and imagemagic tools and uses them to
+    process video files and directories with video files into a montage of screenshots from
+    various intervals in each video file.
+    """
     def __init__(self, config):
         self.config = config
         self._pool = ThreadPool()
 
-    def start(self):
-        self._process_videos(self.config.video_files)
-
-    def _filter_video_files(self, video_file):
-        name, ext = os.path.splitext(video_file)
-        return ext[1:] in _VIDEO_EXTENSIONS
-
-    def _process_videos(self, video_files):
+    # TODO: create two classes. one which exposes the public methods and another
+    #       internal class which contains all internal methods
+    def process_videos(self):
+        "Start processing video files."
         if not self.config.tempdir:
             tempdir = tempfile.mkdtemp()
             cleanup = True
@@ -76,9 +82,7 @@ class VideoMontager:
             cleanup = False
 
         print "Creating tempdir %s" % tempdir
-        video_files = filter(self._filter_video_files, video_files)
-        for video_file in video_files:
-            video = self._video(video_file)
+        for video in self._get_videos():
             tempprefix = os.path.join(tempdir, video.basename)
             self._process_video(video, tempprefix)
 
@@ -86,7 +90,59 @@ class VideoMontager:
         if cleanup:
             shutil.rmtree(tempdir)
 
+    def _video(self, video_file):
+        ffprobe = ffprobe_cmd('"%s"' % video_file,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
+        stdout, stderr = ffprobe.communicate()
+        v = _VIDEO_RE.search(stdout).groupdict()
+        return Video(filename=video_file,
+                     basename=os.path.basename(video_file),
+                     codec=v['codec'],
+                     resolution=v['resolution'],
+                     fps=int(v['fps']),
+                     duration=timedelta(
+                              hours=int(v['hours']),
+                              minutes=int(v['minutes']),
+                              seconds=int(v['seconds'])))
+
+
+    def _get_videos(self):
+        """
+        Generator for producing Video objects from specified files and directories
+        """
+        def is_video(filepath):
+            if not os.path.exists(filepath):
+                return False
+            if not os.path.isfile(filepath):
+                return False
+            name, ext = os.path.splitext(filepath)
+            return ext[1:] in _VIDEO_EXTENSIONS
+
+        for video_file in self.config.video_files:
+            if os.path.isdir(video_file):
+                if self.config.recursive:
+                    for root, dirs, files in os.walk(video_file):
+                        for filename in sorted(files):
+                            filepath = os.path.join(root, filename)
+                            if is_video(filepath):
+                                yield self._video(filepath)
+                else:
+                    for filename in sorted(os.listdir(video_file)):
+                        filepath = os.path.join(video_file, filename)
+                        if is_video(filepath):
+                            yield self._video(filepath)
+            elif is_video(video_file):
+                yield self._video(video_file)
+            else:
+                # argument not a video file
+                # TODO(jcon): error logging / notification
+                pass
+
     def _process_video(self, video, tempprefix):
+        """
+        Process individual Video object.
+        """
         outdir = self.config.outdir or os.path.dirname(video.filename)
         outprefix = os.path.join(outdir, video.basename)
         montage_file = "%s.%s" % (outprefix, self.config.format)
@@ -99,29 +155,14 @@ class VideoMontager:
             os.remove(montage_file)
 
         print "Creating thumbnails for %s" % video.basename
-        thumbnails = self.create_thumbnails(video, tempprefix)
+        thumbnails = self._create_thumbnails(video, tempprefix)
         print "Resizing thumbnails"
         self._pool.map(self._resize_thumbnail, thumbnails)
         print "Creating montage %s" % montage_file
         self._create_montage(montage_file, thumbnails)
         self._apply_label(montage_file, video)
-        map(os.remove, thumbnails)
-
-    def _video(self, video_file):
-        ffprobe = ffprobe_cmd('"%s"' % video_file,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT)
-        stdout, stderr = ffprobe.communicate()
-        v = _VIDEO_RE.search(stdout).groupdict()
-        return self.Video(filename=video_file,
-                          basename=os.path.basename(video_file),
-                          codec=v['codec'],
-                          resolution=v['resolution'],
-                          fps=int(v['fps']),
-                          duration=timedelta(
-                              hours=int(v['hours']),
-                              minutes=int(v['minutes']),
-                              seconds=int(v['seconds'])))
+        for thumbnail in thumbnails:
+            os.remove(thumbnail)
 
     def _create_montage(self, montage_file, thumbnails):
         montage_cmd('-background %s '
@@ -155,7 +196,7 @@ class VideoMontager:
                         thumbnail))
         convert.wait()
 
-    def create_thumbnails(self, video, outprefix):
+    def _create_thumbnails(self, video, outprefix):
         vframes = self.config.thumbnails + 1
         interval = (video.duration.total_seconds() - 60) / self.config.thumbnails
         ffmpeg = ffmpeg_cmd('-y -i "%s"'

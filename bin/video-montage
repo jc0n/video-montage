@@ -11,23 +11,26 @@ def parse_args():
     parser.add_argument('video_files', metavar='video_file', nargs='*',
             help='List video files to montage')
 
+    parser.add_argument('--recursive', '-r', default=False, action='store_true',
+            help='Process all video files within all subdirectories of specified directorie(s)')
+
     parser.add_argument('--thumbnails', '-n', metavar='N', default=25, type=int,
             help='Number of thumbnails to include')
 
-    parser.add_argument('--thumbsize', '-s', metavar='N', default=202, type=int,
+    parser.add_argument('--thumbsize', '-s', metavar='N', default=435, type=int,
             help='Size of individual thumbnails')
 
     parser.add_argument('--outdir', '-d', metavar='PATH', default=None,
             help='Output directory for montage images defaults to same '
                  'directory as the input video file.')
 
-    parser.add_argument('--overwrite', default=False, action='store_true',
+    parser.add_argument('--overwrite', '-f', default=False, action='store_true',
             help='Overwrite existing montage image files.')
 
     parser.add_argument('--start-seconds', '-ss', metavar='N', default=30, type=int,
             help='Start reading from video at specified offset in seconds')
 
-    parser.add_argument('--format', '-f', default='png',
+    parser.add_argument('--format', '-F', default='png',
             choices=('png', 'gif', 'jpg'),
             help='Output format for montage image')
 
@@ -53,5 +56,5 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     m = VideoMontager(args)
-    m.start()
+    m.process_videos()
 
