@@ -44,7 +44,7 @@ def parse_args():
     if args and args.version:
         print 'video-montage version %s by %s' % (__version__, __author__)
         raise SystemExit(0)
-    if not args or args.video_files is None:
+    if not args or not args.video_files:
         parser.print_help()
         raise SystemExit(1)
 
