@@ -2,13 +2,13 @@
 
 import argparse
 
-from VideoMontager import VideoMontager
+from VideoMontager import VideoMontager, __version__, __author__
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Create a montage of frames from a video file")
 
-    parser.add_argument('video_files', metavar='video_file', nargs='+',
+    parser.add_argument('video_files', metavar='video_file', nargs='*',
             help='List video files to montage')
 
     parser.add_argument('--thumbnails', '-n', metavar='N', default=25, type=int,
@@ -37,7 +37,13 @@ def parse_args():
     parser.add_argument('--background-color', '-bg', default='black',
             help='Background color for the montage.')
 
+    parser.add_argument('--version', '-V', default=False, action='store_true',
+            help="Print version number and exit.")
+
     args = parser.parse_args()
+    if args and args.version:
+        print 'video-montage version %s by %s' % (__version__, __author__)
+        raise SystemExit(0)
     if not args or args.video_files is None:
         parser.print_help()
         raise SystemExit(1)
