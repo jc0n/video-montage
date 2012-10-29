@@ -58,6 +58,19 @@ _VIDEO_RE = re.compile('''
 
 Video = namedtuple('Video', 'filename basename resolution codec duration fps')
 
+class InvalidArgumentException(Exception):
+    """
+    Raised when command line argument is invalid.
+    """
+    pass
+
+class InvalidVideoException(Exception):
+    """
+    Raised when video file contains invalid data.
+    """
+    pass
+
+
 class VideoMontager(object):
     """
     VideoMontager Class
@@ -77,17 +90,23 @@ class VideoMontager(object):
         if not self.config.tempdir:
             tempdir = tempfile.mkdtemp()
             cleanup = True
+            print "Created tempdir %s" % tempdir
         else:
             tempdir = self.config.tempdir
             cleanup = False
+            print "Using tempdir %s" % tempdir
 
-        print "Creating tempdir %s" % tempdir
-        for video in self._get_videos():
+        for video_file in self._get_video_files():
+            try:
+                video = self._video(video_file)
+            except InvalidVideoException:
+                continue
+
             tempprefix = os.path.join(tempdir, video.basename)
             self._process_video(video, tempprefix)
 
-        print "Cleaning up"
         if cleanup:
+            print "Cleaning up %s" % tempdir
             shutil.rmtree(tempdir)
 
     def _video(self, video_file):
@@ -95,7 +114,10 @@ class VideoMontager(object):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         stdout, stderr = ffprobe.communicate()
-        v = _VIDEO_RE.search(stdout).groupdict()
+        m = _VIDEO_RE.search(stdout)
+        if not m:
+            raise InvalidVideoException(video_file)
+        v = m.groupdict()
         return Video(filename=video_file,
                      basename=os.path.basename(video_file),
                      codec=v['codec'],
@@ -107,7 +129,7 @@ class VideoMontager(object):
                               seconds=int(v['seconds'])))
 
 
-    def _get_videos(self):
+    def _get_video_files(self):
         """
         Generator for producing Video objects from specified files and directories
         """
@@ -115,6 +137,8 @@ class VideoMontager(object):
             if not os.path.exists(filepath):
                 return False
             if not os.path.isfile(filepath):
+                return False
+            if not os.path.getsize(filepath):
                 return False
             name, ext = os.path.splitext(filepath)
             return ext[1:] in _VIDEO_EXTENSIONS
@@ -126,18 +150,17 @@ class VideoMontager(object):
                         for filename in sorted(files):
                             filepath = os.path.join(root, filename)
                             if is_video(filepath):
-                                yield self._video(filepath)
+                                    yield filepath
                 else:
                     for filename in sorted(os.listdir(video_file)):
                         filepath = os.path.join(video_file, filename)
                         if is_video(filepath):
-                            yield self._video(filepath)
+                            yield filepath
             elif is_video(video_file):
-                yield self._video(video_file)
+                yield video_file
             else:
-                # argument not a video file
                 # TODO(jcon): error logging / notification
-                pass
+                raise InvalidArgumentException(video_file)
 
     def _process_video(self, video, tempprefix):
         """
