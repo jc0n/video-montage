@@ -33,16 +33,16 @@ def command(cmd):
         return subprocess.Popen(fullcmd, shell=True, **kwargs)
     return wrapper
 
-ffmpeg_cmd = command('ffmpeg')
-ffprobe_cmd = command('ffprobe')
-montage_cmd = command('montage')
-convert_cmd = command('convert')
+FFMPEG = command('ffmpeg')
+FFPROBE = command('ffprobe')
+MONTAGE = command('montage')
+CONVERT = command('convert')
 
-_VIDEO_EXTENSIONS = frozenset(('avi', 'flv', 'mkv', 'mng', 'mov',
-                               'movie', 'mp4', 'mpe', 'mpeg',
-                               'mpg', 'mpv', 'ogv', 'ts', 'wmv'))
+VIDEO_EXTENSIONS = frozenset(('avi', 'flv', 'mkv', 'mng', 'mov',
+                              'movie', 'mp4', 'mpe', 'mpeg',
+                              'mpg', 'mpv', 'ogv', 'ts', 'wmv'))
 
-_VIDEO_RE = re.compile(r'''
+VIDEO_RE = re.compile(r'''
     Duration:\s+(?P<hours>\d{2}):
                 (?P<minutes>\d{2}):
                 (?P<seconds>\d{2})\.\d{2},
@@ -52,15 +52,18 @@ _VIDEO_RE = re.compile(r'''
     (?P<fps>\d+)\s+tbr,
     ''', re.VERBOSE | re.DOTALL | re.MULTILINE)
 
-_FRAME_RE = re.compile(b'frame=\s*(\d+)', re.MULTILINE)
+FRAME_RE = re.compile(b'frame=\s*(\d+)', re.MULTILINE)
+
 
 Video = namedtuple('Video', 'filename basename resolution codec duration fps')
+
 
 class InvalidArgumentException(Exception):
     """
     Raised when command line argument is invalid.
     """
     pass
+
 
 class InvalidVideoException(Exception):
     """
@@ -73,24 +76,35 @@ class VideoMontager(object):
     """
     VideoMontager Class
 
-    Provides a simple wrapper around ffmpeg and imagemagic tools and uses them to
-    process video files and directories with video files into a montage of screenshots from
-    various intervals in each video file.
+    Provides a simple wrapper around ffmpeg and imagemagic tools and uses
+    them to process video files and directories with video files into a
+    montage of screenshots from various intervals in each video file.
     """
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, video_files, background_color='black', format='png',
+                 outdir=None, overwrite=False, progress=False, recursive=False,
+                 start_seconds=30, tempdir=None, thumbnails=25, thumbsize=435,
+                *args, **kwargs):
+        self.background_color = background_color
+        self.format = format
+        self.outdir = outdir
+        self.overwrite = overwrite
+        self.progress = progress
+        self.recursive = recursive
+        self.start_seconds = start_seconds
+        self.tempdir = tempdir
+        self.thumbnails = thumbnails
+        self.thumbsize = thumbsize
+        self.video_files = video_files
         self._pool = ThreadPool()
 
-    # TODO: create two classes. one which exposes the public methods and another
-    #       internal class which contains all internal methods
     def process_videos(self):
         "Start processing video files."
-        if not self.config.tempdir:
+        if not self.tempdir:
             tempdir = tempfile.mkdtemp()
             cleanup = True
             log.info("Created temp directory: %s" % tempdir)
         else:
-            tempdir = self.config.tempdir
+            tempdir = self.tempdir
             cleanup = False
             log.info("Using specified temp directory: %s" % tempdir)
 
@@ -108,11 +122,11 @@ class VideoMontager(object):
             shutil.rmtree(tempdir)
 
     def _video(self, video_file):
-        ffprobe = ffprobe_cmd('"%s"' % video_file,
+        ffprobe = FFPROBE('"%s"' % video_file,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         stdout, stderr = ffprobe.communicate()
-        m = _VIDEO_RE.search(stdout)
+        m = VIDEO_RE.search(stdout)
         if not m:
             log.error("ffprobe failed for file %s" % video_file)
             raise InvalidVideoException(video_file)
@@ -140,11 +154,11 @@ class VideoMontager(object):
             if not os.path.getsize(filepath):
                 return False
             name, ext = os.path.splitext(filepath)
-            return ext[1:] in _VIDEO_EXTENSIONS
+            return ext[1:] in VIDEO_EXTENSIONS
 
-        for video_file in self.config.video_files:
+        for video_file in self.video_files:
             if os.path.isdir(video_file):
-                if self.config.recursive:
+                if self.recursive:
                     for root, dirs, files in os.walk(video_file):
                         for filename in sorted(files):
                             filepath = os.path.join(root, filename)
@@ -165,13 +179,11 @@ class VideoMontager(object):
         """
         Process individual Video object.
         """
-        outdir = self.config.outdir or os.path.dirname(video.filename)
+        outdir = self.outdir or os.path.dirname(video.filename)
         outprefix = os.path.join(outdir, video.basename)
-        montage_file = "%s.%s" % (outprefix, self.config.format)
+        montage_file = "%s.%s" % (outprefix, self.format)
         if os.path.exists(montage_file):
-            if not self.config.overwrite:
-                # TODO: add log entry
-                # montage image file already exists
+            if not self.overwrite:
                 log.warning("Found existing montage file %s, skipping." % montage_file)
                 return
             os.remove(montage_file)
@@ -194,46 +206,35 @@ class VideoMontager(object):
                 os.remove(thumbnail)
 
     def _create_montage(self, montage_file, thumbnails):
-        montage_cmd('-background %s '
-                    '-borderwidth 0 -geometry "+1+1" '
-                    '"%s" "%s"' % (self.config.background_color,
-                                   '" "'.join(thumbnails[1:]),
-                                   montage_file)).wait()
+        montage = MONTAGE('-background %s -borderwidth 0 -geometry "+1+1" "%s" "%s"' % (
+                          self.background_color, '" "'.join(thumbnails[1:]), montage_file))
+        montage.wait()
 
     def _apply_label(self, montage_file, video):
         label = 'Filename: %s | Codec: %s | Resolution: %s | Length %s' % (
-                    video.basename,
-                    video.codec,
-                    video.resolution,
-                    str(video.duration))
+                    video.basename, video.codec, video.resolution, str(video.duration))
 
-        convert_cmd('-gravity North -splice 0x28 -background %s '
-                    '-fill white -pointsize 12 '
-                    '-annotate +0+6 '
-                    '"%s" "%s" "%s"' % (self.config.background_color,
-                                        label,
-                                        montage_file,
-                                        montage_file)).wait()
+        convert = CONVERT('-gravity North -splice 0x28 -background %s '
+                          '-fill white -pointsize 12 -annotate +0+6 '
+                          '"%s" "%s" "%s"' % (
+                          self.background_color, label, montage_file, montage_file))
+        convert.wait()
 
     def _resize_thumbnail(self, thumbnail):
-        convert = convert_cmd('-quality 100 '
-                    '-resize "%d" '
-                    '"%s" "%s"' % (
-                        self.config.thumbsize,
-                        thumbnail,
-                        thumbnail))
+        convert = CONVERT('-quality 100 -resize "%d" "%s" "%s"' % (
+                        self.thumbsize, thumbnail, thumbnail))
         convert.wait()
 
     def _create_thumbnails(self, video, outprefix):
-        vframes = self.config.thumbnails + 1
-        interval = (video.duration.total_seconds() - 60) / self.config.thumbnails
-        ffmpeg = ffmpeg_cmd('-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s"' % (
-                            video.filename, self.config.start_seconds, interval,
-                            vframes, outprefix, self.config.format),
+        vframes = self.thumbnails + 1
+        interval = (video.duration.total_seconds() - 60) / self.thumbnails
+        ffmpeg = FFMPEG('-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s"' % (
+                            video.filename, self.start_seconds, interval,
+                            vframes, outprefix, self.format),
                             stderr=subprocess.PIPE,
                             bufsize=1)
 
-        if self.config.progress:
+        if self.progress:
             progress = ProgressBar(maxval=vframes, widgets=[SimpleProgress(), Bar()])
             progress.start()
             b = bytearray(80)
@@ -242,12 +243,12 @@ class VideoMontager(object):
                 if chunk == b'':
                     break
                 b.extend(chunk)
-                m = _FRAME_RE.search(b)
+                m = FRAME_RE.search(b)
                 if m:
                     progress.update(int(m.group(1)))
                     b[:] = b''
             progress.finish()
 
         ffmpeg.wait()
-        return ["%s_%03d.%s" % (outprefix, i, self.config.format)
+        return ["%s_%03d.%s" % (outprefix, i, self.format)
                     for i in range(1, vframes + 1)]
