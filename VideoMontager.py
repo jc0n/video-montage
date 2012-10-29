@@ -20,7 +20,7 @@ from progressbar import ProgressBar, SimpleProgress, Bar
 from which import which, CommandNotFoundException
 
 __author__ = 'John O\'Connor'
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 
 __all__ = ('VideoMontager', )
 
