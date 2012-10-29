@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Video Montage : Generate a montage of video frames (screencaps) from video files" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Video Montage</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/jc0n/video-montage">View on GitHub</a>
+
+          <h1 id="project_title">Video Montage</h1>
+          <h2 id="project_tagline">Generate a montage of video frames (screencaps) from video files</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/jc0n/video-montage/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/jc0n/video-montage/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h1>video-montage</h1>
+
+<p>Generate a montage of video frames (aka. screen captures or screencaps) from video files or a directory of video files. Produces a png, gif, or jpeg image with thumbnails of each frame grouped into a montage.</p>
+
+<h2>Install</h2>
+
+<h4>Binary Packages (python not required):</h4>
+
+<ul>
+<li>Download pre-built binary package from github: <a href="https://github.com/jc0n/video-montage/downloads">https://github.com/jc0n/video-montage/downloads</a>
+</li>
+<li>Install VC++ 2008 Redist: <a href="http://www.microsoft.com/en-us/download/confirmation.aspx?id=29">http://www.microsoft.com/en-us/download/confirmation.aspx?id=29</a>
+</li>
+</ul><h4>From Source, with Python installed:</h4>
+
+<pre><code>git clone git://github.com/jc0n/video-montage.git
+cd video-montage
+pip install -r requirements.txt
+python setup.py install
+</code></pre>
+
+<h2>Usage</h2>
+
+<p>Basic Usage:
+<code>video-montage video1.mkv video2.avi</code></p>
+
+<p>Put screencaps in a separate directory:
+<code>video-montage -d screens/ videos/</code></p>
+
+<p>Process all videos in subdirectories recursively:
+<code>video-montage -d screens/ -r videos/</code></p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Video Montage maintained by <a href="https://github.com/jc0n">jc0n</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
