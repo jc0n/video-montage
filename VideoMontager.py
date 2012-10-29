@@ -83,7 +83,7 @@ class VideoMontager(object):
     def __init__(self, video_files, background_color='black', format='png',
                  outdir=None, overwrite=False, progress=False, recursive=False,
                  start_seconds=30, tempdir=None, thumbnails=25, thumbsize=435,
-                *args, **kwargs):
+                 ffmpeg_options='', *args, **kwargs):
         self.background_color = background_color
         self.format = format
         self.outdir = outdir
@@ -95,6 +95,7 @@ class VideoMontager(object):
         self.thumbnails = thumbnails
         self.thumbsize = thumbsize
         self.video_files = video_files
+        self.ffmpeg_options = ffmpeg_options
         self._pool = ThreadPool()
 
     def process_videos(self):
@@ -228,12 +229,10 @@ class VideoMontager(object):
     def _create_thumbnails(self, video, outprefix):
         vframes = self.thumbnails + 1
         interval = (video.duration.total_seconds() - 60) / self.thumbnails
-        ffmpeg = FFMPEG('-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s"' % (
-                            video.filename, self.start_seconds, interval,
-                            vframes, outprefix, self.format),
-                            stderr=subprocess.PIPE,
-                            bufsize=1)
-
+        args = '-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s" %s' % (
+               video.filename, self.start_seconds, interval, vframes, outprefix,
+               self.format, self.ffmpeg_options)
+        ffmpeg = FFMPEG(args, stderr=subprocess.PIPE, bufsize=1)
         if self.progress:
             progress = ProgressBar(maxval=vframes, widgets=[SimpleProgress(), Bar()])
             progress.start()

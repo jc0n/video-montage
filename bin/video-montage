@@ -19,6 +19,9 @@ def parse_args():
             choices=('png', 'gif', 'jpg'),
             help='Output format for montage image.')
 
+    parser.add_argument('--ffmpeg-options', default='',
+            help='Additional arguments to pass to ffmpeg when creating thumbnails.')
+
     parser.add_argument('--outdir', '-d', metavar='PATH', default=None,
             help='Output directory for montage images. Defaults to the same '
                  'directory as the input video file.')
