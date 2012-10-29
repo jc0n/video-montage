@@ -201,12 +201,11 @@ class VideoMontager(object):
                                    montage_file)).wait()
 
     def _apply_label(self, montage_file, video):
-        label = 'Filename: %s | Codec: %s | Resolution: %s | Length %s | FPS: %d' % (
+        label = 'Filename: %s | Codec: %s | Resolution: %s | Length %s' % (
                     video.basename,
                     video.codec,
                     video.resolution,
-                    str(video.duration),
-                    video.fps)
+                    str(video.duration))
 
         convert_cmd('-gravity North -splice 0x28 -background %s '
                     '-fill white -pointsize 12 '
