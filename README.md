@@ -3,6 +3,8 @@ video-montage
 
 Generate a montage of video frames (aka. screen captures or screencaps) from video files or a directory of video files. Produces a png, gif, or jpeg image with thumbnails of each frame grouped into a montage.
 
+![Example Image](https://raw.github.com/jc0n/video-montage/master/example.png)
+
 ## Install
 
 ### Dependencies
