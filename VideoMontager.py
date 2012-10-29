@@ -144,7 +144,7 @@ class VideoMontager(object):
 
     def _get_video_files(self):
         """
-        Generator for producing Video objects from specified files and directories
+        Generator producing all video files from specified files and directories.
         """
         def is_video(filepath):
             if not os.path.exists(filepath):
