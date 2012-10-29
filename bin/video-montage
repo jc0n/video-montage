@@ -12,7 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Create a montage of frames from a video file")
 
-    parser.add_argument('--background-color', '-bg', default='black',
+    parser.add_argument('--background-color', '-bg', default='black', metavar='COLOR',
             help='Background color for the montage.')
 
     parser.add_argument('--format', '-F', default='png',
@@ -21,6 +21,9 @@ def parse_args():
 
     parser.add_argument('--ffmpeg-options', default='',
             help='Additional arguments to pass to ffmpeg when creating thumbnails.')
+
+    parser.add_argument('--label-color', '-fg', default='white', metavar='COLOR',
+            help='Font color for the label placed at the top of the montage image.')
 
     parser.add_argument('--outdir', '-d', metavar='PATH', default=None,
             help='Output directory for montage images. Defaults to the same '

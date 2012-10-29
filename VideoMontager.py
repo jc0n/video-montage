@@ -20,7 +20,7 @@ from progressbar import ProgressBar, SimpleProgress, Bar
 from which import which, CommandNotFoundException
 
 __author__ = 'John O\'Connor'
-__version__ = '0.1.3'
+__version__ = '0.1.4'
 
 __all__ = ('VideoMontager', )
 
@@ -81,11 +81,12 @@ class VideoMontager(object):
     montage of screenshots from various intervals in each video file.
     """
     def __init__(self, video_files, background_color='black', format='png',
-                 outdir=None, overwrite=False, progress=False, recursive=False,
-                 start_seconds=30, tempdir=None, thumbnails=25, thumbsize=435,
+                 label_color='white', outdir=None, overwrite=False, progress=False,
+                 recursive=False, start_seconds=30, tempdir=None, thumbnails=25, thumbsize=435,
                  ffmpeg_options='', *args, **kwargs):
         self.background_color = background_color
         self.format = format
+        self.label_color = label_color
         self.outdir = outdir
         self.overwrite = overwrite
         self.progress = progress
@@ -212,13 +213,13 @@ class VideoMontager(object):
         montage.wait()
 
     def _apply_label(self, montage_file, video):
-        label = 'Filename: %s | Codec: %s | Resolution: %s | Length %s' % (
+        label = 'File: %s | Codec: %s | Resolution: %s | Length %s' % (
                     video.basename, video.codec, video.resolution, str(video.duration))
 
         convert = CONVERT('-gravity North -splice 0x28 -background %s '
-                          '-fill white -pointsize 12 -annotate +0+6 '
+                          '-fill %s -pointsize 12 -annotate +0+6 '
                           '"%s" "%s" "%s"' % (
-                          self.background_color, label, montage_file, montage_file))
+                          self.background_color, self.label_color, label, montage_file, montage_file))
         convert.wait()
 
     def _resize_thumbnail(self, thumbnail):
