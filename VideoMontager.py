@@ -30,6 +30,7 @@ def command(cmd):
     which(cmd)
     def wrapper(argstr, **kwargs):
         fullcmd = cmd + ' %s' % argstr
+        log.debug('Executing shell command: %s' % fullcmd)
         return subprocess.Popen(fullcmd, shell=True, **kwargs)
     return wrapper
 
@@ -80,9 +81,9 @@ class VideoMontager(object):
     them to process video files and directories with video files into a
     montage of screenshots from various intervals in each video file.
     """
-    def __init__(self, video_files, background_color='black', format='png',
+    def __init__(self, video_files, background_color='black', format='jpg',
                  label_color='white', outdir=None, overwrite=False, progress=False,
-                 recursive=False, start_seconds=30, tempdir=None, thumbnails=25, thumbsize=435,
+                 recursive=False, start_seconds=120, tempdir=None, thumbnails=25, thumbsize=435,
                  ffmpeg_options='', *args, **kwargs):
         self.background_color = background_color
         self.format = format
@@ -229,7 +230,7 @@ class VideoMontager(object):
 
     def _create_thumbnails(self, video, outprefix):
         vframes = self.thumbnails + 1
-        interval = (video.duration.total_seconds() - 60) / self.thumbnails
+        interval = (video.duration.total_seconds() - self.start_seconds) / self.thumbnails
         args = '-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s" %s' % (
                video.filename, self.start_seconds, interval, vframes, outprefix,
                self.format, self.ffmpeg_options)
