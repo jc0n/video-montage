@@ -111,14 +111,17 @@ class VideoMontager(object):
             cleanup = False
             log.info("Using specified temp directory: %s" % tempdir)
 
-        for video_file in self._get_video_files():
-            try:
-                video = self._video(video_file)
-            except InvalidVideoException:
-                continue
+        try:
+            for video_file in self._get_video_files():
+                try:
+                    video = self._video(video_file)
+                except InvalidVideoException:
+                    continue
 
-            tempprefix = os.path.join(tempdir, video.basename)
-            self._process_video(video, tempprefix)
+                tempprefix = os.path.join(tempdir, video.basename)
+                self._process_video(video, tempprefix)
+        except KeyboardInterrupt:
+            pass
 
         if cleanup:
             log.info("Removing temp directory: %s" % tempdir)
