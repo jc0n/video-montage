@@ -20,7 +20,7 @@ from progressbar import ProgressBar, SimpleProgress, Bar
 from which import which, CommandNotFoundException
 
 __author__ = 'John O\'Connor'
-__version__ = '0.1.3'
+__version__ = '0.1.5'
 
 __all__ = ('VideoMontager', )
 
@@ -30,6 +30,7 @@ def command(cmd):
     which(cmd)
     def wrapper(argstr, **kwargs):
         fullcmd = cmd + ' %s' % argstr
+        log.debug('Executing shell command: %s' % fullcmd)
         return subprocess.Popen(fullcmd, shell=True, **kwargs)
     return wrapper
 
@@ -80,12 +81,13 @@ class VideoMontager(object):
     them to process video files and directories with video files into a
     montage of screenshots from various intervals in each video file.
     """
-    def __init__(self, video_files, background_color='black', format='png',
-                 outdir=None, overwrite=False, progress=False, recursive=False,
-                 start_seconds=30, tempdir=None, thumbnails=25, thumbsize=435,
+    def __init__(self, video_files, background_color='black', format='jpg',
+                 label_color='white', outdir=None, overwrite=False, progress=False,
+                 recursive=False, start_seconds=120, tempdir=None, thumbnails=25, thumbsize=435,
                  ffmpeg_options='', *args, **kwargs):
         self.background_color = background_color
         self.format = format
+        self.label_color = label_color
         self.outdir = outdir
         self.overwrite = overwrite
         self.progress = progress
@@ -109,14 +111,17 @@ class VideoMontager(object):
             cleanup = False
             log.info("Using specified temp directory: %s" % tempdir)
 
-        for video_file in self._get_video_files():
-            try:
-                video = self._video(video_file)
-            except InvalidVideoException:
-                continue
+        try:
+            for video_file in self._get_video_files():
+                try:
+                    video = self._video(video_file)
+                except InvalidVideoException:
+                    continue
 
-            tempprefix = os.path.join(tempdir, video.basename)
-            self._process_video(video, tempprefix)
+                tempprefix = os.path.join(tempdir, video.basename)
+                self._process_video(video, tempprefix)
+        except KeyboardInterrupt:
+            pass
 
         if cleanup:
             log.info("Removing temp directory: %s" % tempdir)
@@ -212,13 +217,13 @@ class VideoMontager(object):
         montage.wait()
 
     def _apply_label(self, montage_file, video):
-        label = 'Filename: %s | Codec: %s | Resolution: %s | Length %s' % (
+        label = 'File: %s | Codec: %s | Resolution: %s | Length %s' % (
                     video.basename, video.codec, video.resolution, str(video.duration))
 
         convert = CONVERT('-gravity North -splice 0x28 -background %s '
-                          '-fill white -pointsize 12 -annotate +0+6 '
+                          '-fill %s -pointsize 12 -annotate +0+6 '
                           '"%s" "%s" "%s"' % (
-                          self.background_color, label, montage_file, montage_file))
+                          self.background_color, self.label_color, label, montage_file, montage_file))
         convert.wait()
 
     def _resize_thumbnail(self, thumbnail):
@@ -228,7 +233,7 @@ class VideoMontager(object):
 
     def _create_thumbnails(self, video, outprefix):
         vframes = self.thumbnails + 1
-        interval = (video.duration.total_seconds() - 60) / self.thumbnails
+        interval = (video.duration.total_seconds() - self.start_seconds) / self.thumbnails
         args = '-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s" %s' % (
                video.filename, self.start_seconds, interval, vframes, outprefix,
                self.format, self.ffmpeg_options)
