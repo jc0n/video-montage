@@ -10,14 +10,17 @@ logger.addHandler(logging.StreamHandler())
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Create a montage of frames from a video file")
+        description="Create a montage of frames from video files.")
 
     parser.add_argument('--background-color', '-bg', default='black', metavar='COLOR',
             help='Background color for the montage.')
 
+    parser.add_argument('--debug', default=False, action='store_true',
+            help="Enable debug output")
+
     parser.add_argument('--format', '-F', default='jpg',
             choices=('png', 'gif', 'jpg'),
-            help='Output format for montage image.')
+            help='Output image format for montage image.')
 
     parser.add_argument('--ffmpeg-options', default='',
             help='Additional arguments to pass to ffmpeg when creating thumbnails.')
@@ -30,37 +33,34 @@ def parse_args():
                  'directory as the input video file.')
 
     parser.add_argument('--overwrite', '-f', default=False, action='store_true',
-            help='Overwrite existing montage image files.')
+            help='Overwrite output image files if they already exist.')
 
     parser.add_argument('--progress', '-p', default=False, action='store_true',
-            help="Show progress bar for creating thumbnails.")
+            help="Show progress while creating thumbnails (as it can take a while).")
 
     parser.add_argument('--quiet', '-q', default=False, action='store_true',
             help="Silent operation.")
 
     parser.add_argument('--recursive', '-r', default=False, action='store_true',
-            help='Process all video files within all subdirectories of specified directorie(s).')
+            help='Process all video files within directories recursively.')
 
     parser.add_argument('--start-seconds', '-ss', metavar='N', default=120, type=int,
-            help='Start reading from video at specified offset in seconds.')
+            help='Start recording video frames at an offset in seconds.')
 
-    parser.add_argument('--tempdir', '-t', metavar='PATH', default=None,
-            help='Temporary directory for processing.')
-
-    parser.add_argument('--thumbnails', '-n', metavar='N', default=25, type=int,
+    parser.add_argument('--thumbnail-count', '-n', metavar='N', default=25, type=int,
             help='Number of thumbnails to include.')
 
-    parser.add_argument('--thumbsize', '-s', metavar='N', default=435, type=int,
-            help='Size of individual thumbnails.')
+    parser.add_argument('--resolution', '-s', metavar='N', default='2560x1600', type=str,
+            help='Size of individual thumbnails. ex. 1920x1080')
 
     parser.add_argument('--verbose', '-v', default=False, action='store_true',
-            help="Show more verbose information.")
+            help="Show more verbose output.")
 
     parser.add_argument('--version', '-V', default=False, action='store_true',
             help="Print version number and exit.")
 
     parser.add_argument('video_files', metavar='video_file', nargs='*',
-            help='List video files to montage.')
+            help='List of video files to process.')
 
     args = parser.parse_args()
     if args and args.version:
@@ -73,6 +73,8 @@ def parse_args():
         logger.setLevel(logging.INFO)
     if args.quiet:
         logger.setLevel(logging.CRITICAL)
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
     return args
 
