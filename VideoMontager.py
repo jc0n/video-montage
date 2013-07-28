@@ -1,6 +1,6 @@
 """
-VideoMontager is a simple class which provides a wrapper around ffmpeg and
-imagemagic using them to create a montage of frames from specified video files.
+VideoMontager provides a wrapper around FFMpeg and ImageMagic using them
+to create a montage of frame thumbnails from specified videos.
 """
 
 import logging
@@ -26,29 +26,44 @@ log = logging.getLogger(__name__)
 
 def command(cmd, executor=subprocess.check_call):
     which(cmd)
-    def wrapper(argstr, **kwargs):
+    def wrapper(argstr, executor=executor, **kwargs):
         fullcmd = cmd + ' %s' % argstr
         log.debug('Executing shell command: %s' % fullcmd)
         return executor(fullcmd, shell=True, **kwargs)
     return wrapper
 
-FFMPEG = command('ffmpeg', subprocess.Popen)
-FFPROBE = command('ffprobe', subprocess.Popen)
-MONTAGE = command('montage')
 
-if platform.system() == "Windows":
-    # C:\Windows\System32\convert.EXE will usually match
-    # first unless we look elsewhere.
-    montage_path = os.path.dirname(which('montage.exe'))
-    CONVERT = command(os.path.join(montage_path, 'convert.exe'))
-else:
-    CONVERT = command('convert')
+def quote_filename(name):
+    return '"%s"' % name.replace('"', '\\"')
+
+def create_convert_command():
+    if platform.system() == "Windows":
+        # C:\Windows\System32\convert.EXE will usually match
+        # first unless we look elsewhere.
+        montage_path = os.path.dirname(which('montage.exe'))
+        return command(os.path.join(montage_path, 'convert.exe'))
+    else:
+        return command('convert')
+
+def check_ffmpeg_supports_nostdin():
+    ffmpeg = FFMPEG('-nostdin', executor=subprocess.Popen,
+                stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+    stdout, stderr = ffmpeg.communicate()
+    return 'Unrecognized option' not in stdout
+
+CONVERT = create_convert_command()
+MONTAGE = command('montage')
+FFPROBE = command('ffprobe', subprocess.Popen)
+FFMPEG = command('ffmpeg', subprocess.Popen)
+
+FFMPEG_SUPPORTS_NOSTDIN = check_ffmpeg_supports_nostdin()
+FFMPEG_STDIO_READ_BUFSIZE = 80
 
 VIDEO_EXTENSIONS = frozenset(('avi', 'flv', 'f4v', 'mkv', 'mng', 'mov',
                               'movie', 'mp4', 'mpe', 'mpeg',
                               'mpg', 'mpv', 'ogv', 'ts', 'wmv'))
 
-VIDEO_RE = re.compile(r'''
+VIDEO_EXPR = re.compile(r'''
     Duration:\s+(?P<hours>\d{2}):
                 (?P<minutes>\d{2}):
                 (?P<seconds>\d{2})\.\d{2},
@@ -58,12 +73,14 @@ VIDEO_RE = re.compile(r'''
     (?P<fps>\d+)\s+tbr,
     ''', re.VERBOSE | re.DOTALL | re.MULTILINE)
 
-FRAME_RE = re.compile(b'frame=\s*(\d+)', re.MULTILINE)
+FRAME_EXPR = re.compile(b'frame=\s*(\d+)', re.MULTILINE)
 
-FFMPEG_STDIO_READ_BUFSIZE = 80
+class Thumbnail(namedtuple('Thumbnail', 'filename time')):
+    def __repr__(self):
+        return self.path
+    __str__ = __repr__
 
 Video = namedtuple('Video', 'filename basename resolution codec duration fps')
-
 
 class InvalidVideoFileException(Exception):
     """
@@ -87,27 +104,34 @@ class VideoMontager(object):
     them to process video files and directories with video files into a
     montage of screenshots from various intervals in each video.
     """
-    def __init__(self, video_files, background_color='black', format='jpg',
-                 label_color='white', outdir=None, overwrite=False, progress=False,
-                 recursive=False, start_seconds=120, thumbnail_count=25, resolution=435,
-                 ffmpeg_options='', *args, **kwargs):
-        self.background_color = background_color
-        self.format = format
-        self.label_color = label_color
-        self.outdir = outdir
-        self.overwrite = overwrite
-        self.progress = progress
-        self.recursive = recursive
-        self.start_seconds = start_seconds
-        self.thumbnail_count = thumbnail_count
-        self.resolution = resolution
+    def __init__(self, video_files, **kwargs):
         self.video_files = video_files
-        self.ffmpeg_options = ffmpeg_options
+        self.background_color = kwargs.pop('background_color', 'black')
+        self.ffmpeg_args = kwargs.pop('ffmpeg_args', '')
+        self.format = kwargs.pop('format', 'jpg')
+        self.include_timestamps = kwargs.pop('include_timestamps', True)
+        self.label_color = kwargs.pop('label_color', 'white')
+        self.montage_args = kwargs.pop('montage_args', '')
+        self.outdir = kwargs.pop('outdir', None)
+        self.overwrite = kwargs.pop('overwrite', False)
+        self.progress = kwargs.pop('progress', False)
+        self.recursive = kwargs.pop('recursive', False)
+        self.resolution = kwargs.pop('resolution', '2560x1600')
+        self.start_seconds = kwargs.pop('start_seconds', 0)
+        self.tile = kwargs.pop('tile', None)
+        if self.tile:
+            if 'x' in self.tile:
+                n, m = map(int, self.tile.split('x', 1))
+            else:
+                m = n = int(self.tile)
+            self.thumbnail_count = n * m
+        else:
+            self.thumbnail_count = kwargs.pop('thumbnail_count', 25)
 
     def process_videos(self):
         "Begin processing video files."
         self.tempdir = tempfile.mkdtemp()
-        log.debug("Created temp directory: %s" % self.tempdir)
+        log.debug("Created temp directory: %s", self.tempdir)
         try:
             for video_file in self._get_video_files():
                 try:
@@ -117,7 +141,7 @@ class VideoMontager(object):
         except KeyboardInterrupt: # mostly for ctrl-c
             pass
         finally:
-            log.debug("Removing temp directory: %s" % self.tempdir)
+            log.debug("Removing temp directory: %s", self.tempdir)
             shutil.rmtree(self.tempdir)
 
     def _make_video(self, video_file):
@@ -125,7 +149,7 @@ class VideoMontager(object):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         stdout, stderr = ffprobe.communicate()
-        m = VIDEO_RE.search(stdout)
+        m = VIDEO_EXPR.search(stdout)
         if not m:
             log.error("ffprobe failed for file %s" % video_file)
             raise InvalidVideoFileException(video_file)
@@ -163,7 +187,7 @@ class VideoMontager(object):
                         for filename in sorted(files):
                             filepath = os.path.join(root, filename)
                             if is_video(filepath):
-                                    yield filepath
+                                yield filepath
                 else:
                     for filename in sorted(os.listdir(video_file)):
                         filepath = os.path.join(video_file, filename)
@@ -175,14 +199,37 @@ class VideoMontager(object):
                 log.warning("Invalid video file specified: %s" % video_file)
                 raise InvalidVideoFileException(video_file)
 
+    def _create_montage(self, montage_file, thumbnails):
+        log.info("Creating montage %s" % montage_file)
+
+        montage_args = ['-background %s' % self.background_color]
+        montage_args.append('-borderwidth 0 -geometry "+1+1"')
+        if self.montage_args:
+            montage_args.append(self.montage_args)
+        montage_args.extend(quote_filename(t.filename) for t in thumbnails)
+        montage_args.append(montage_file)
+        MONTAGE(' '.join(montage_args))
+        CONVERT('-resize "%s" %s %s' % (
+            self.resolution, montage_file, montage_file))
+
+    def _apply_header_label(self, montage_file, video):
+        log.debug("Applying label for %s" % montage_file)
+
+        label = '%s | Codec: %s | Resolution: %s | Length %s' % (
+            video.basename, video.codec, video.resolution, str(video.duration))
+        CONVERT('-gravity North -splice 0x28 -background %s '
+                '-fill %s -pointsize 12 -annotate +0+6 "%s" %s %s' % (
+                    self.background_color, self.label_color, label,
+                    montage_file, montage_file))
+
     def _process_video_file(self, video_file):
-        "Process an individual `Video` object."
         outdir = self.outdir or os.path.dirname(video_file)
         outprefix = os.path.join(outdir, os.path.basename(video_file))
         montage_file = "%s.%s" % (outprefix, self.format)
         if os.path.exists(montage_file):
             if not self.overwrite:
-                log.info("Found existing montage file %s, skipping." % montage_file)
+                msg = "Found existing montage file %s, skipping." % montage_file
+                log.info(msg)
                 return
             os.remove(montage_file)
 
@@ -190,34 +237,46 @@ class VideoMontager(object):
         tempprefix = os.path.join(self.tempdir, video.basename)
         thumbnails = self._create_thumbnails(video, tempprefix)
 
-        log.info("Creating montage %s" % montage_file)
-        MONTAGE('-background %s -borderwidth 0 -geometry "+1+1" "%s" "%s"' % (
-                self.background_color, '" "'.join(thumbnails[1:]), montage_file))
-        CONVERT('-resize "%s" "%s" "%s"' % (self.resolution, montage_file, montage_file))
-        log.debug("Applying label for %s" % montage_file)
-        label = '%s | Codec: %s | Resolution: %s | Length %s' % (
-                    video.basename, video.codec, video.resolution, str(video.duration))
-        CONVERT('-gravity North -splice 0x28 -background %s '
-                '-fill %s -pointsize 12 -annotate +0+6 '
-                '"%s" "%s" "%s"' % (
-                self.background_color, self.label_color, label,
-                montage_file, montage_file))
-
+        montage_file = quote_filename(montage_file)
+        self._create_montage(montage_file, thumbnails)
+        self._apply_header_label(montage_file, video)
 
     def _create_thumbnails(self, video, outprefix):
         log.info("Creating thumbnails for %s" % video.basename)
 
-        vframes = self.thumbnail_count + 1
-        interval = (video.duration.total_seconds() - self.start_seconds) / self.thumbnail_count
-        args = '-y -i "%s" -ss %d -r "1/%d" -vframes %d -bt 100000000 "%s_%%03d.%s" %s' % (
-               video.filename, self.start_seconds, interval, vframes, outprefix,
-               self.format, self.ffmpeg_options)
+        def add_thumbnail_timestamp(thumbnail):
+            filename = quote_filename(thumbnail.filename)
+            hours, r = divmod(thumbnail.time.total_seconds(), 3600)
+            minutes, seconds = divmod(r, 60)
+            label = '%02d:%02d:%02d' % (hours, minutes, seconds)
+            CONVERT('-gravity northeast -pointsize 36 '
+                    '-stroke black -strokewidth 6 -annotate +6+10 "%s" '
+                    '-stroke white -strokewidth 1 '
+                    '-fill white -annotate +10+10 "%s" '
+                    '%s %s' % (label, label, filename, filename))
 
-        ffmpeg = FFMPEG(args, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+        interval = ((video.duration.total_seconds() - self.start_seconds)
+                        / self.thumbnail_count)
+
+        args = ['-y -ss %d -i' % self.start_seconds]
+        args.append(quote_filename(video.filename))
+        args.append('-r "1/%d"' % interval)
+        args.append('-vframes %d -bt 100000000' % (self.thumbnail_count + 1))
+        args.append(quote_filename('%s_%%03d.%s' % (outprefix, self.format)))
+        if self.ffmpeg_args:
+            args.append(self.ffmpeg_args)
+        if FFMPEG_SUPPORTS_NOSTDIN:
+            args.append('-nostdin')
+
+        ffmpeg = FFMPEG(' '.join(args),
+                stderr=subprocess.STDOUT,
+                stdout=subprocess.PIPE)
 
         # whether or not to show a progress bar
         if self.progress:
-            progress = ProgressBar(maxval=self.thumbnail_count, widgets=[SimpleProgress(), Bar()])
+            progress = ProgressBar(
+                    maxval=self.thumbnail_count,
+                    widgets=[SimpleProgress(), Bar()])
             progress.start()
 
         # consume stdout output from ffmpeg and extract progress information
@@ -229,20 +288,27 @@ class VideoMontager(object):
             if not chunk:
                 break
             b += chunk
-            m = FRAME_RE.search(b)
-            if not m:
+            m = FRAME_EXPR.search(b)
+            if m is None:
                 continue
             next_index = int(m.group(1))
             if next_index <= index:
                 b[:] = b''
                 continue
             index = next_index
-            if index > 1: # skip the first thumbnail
-                thumbnail_file = "%s_%03d.%s" % (outprefix, index, self.format)
-                if not os.path.exists(thumbnail_file):
-                    raise VideoProcessingException(
-                            "Unable to create thumbnail image %d." % index)
-                thumbnails.append(thumbnail_file)
+            if index < 1:
+                # skip the first thumbnail because ffmpeg always creates a duplicate
+                continue
+            filename = "%s_%03d.%s" % (outprefix, index, self.format)
+            if not os.path.exists(filename):
+                error = "Failed creating thumbnail %d (%s)." % (index, filename)
+                raise VideoProcessingException(error)
+
+            seconds = self.start_seconds + (interval * (index - 2))
+            thumbnail = Thumbnail(filename, timedelta(seconds=seconds))
+            if self.include_timestamps:
+                add_thumbnail_timestamp(thumbnail)
+            thumbnails.append(thumbnail)
             if self.progress:
                 progress.update(max(0, index - 1))
 
