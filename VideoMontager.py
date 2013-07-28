@@ -44,7 +44,7 @@ if platform.system() == "Windows":
 else:
     CONVERT = command('convert')
 
-VIDEO_EXTENSIONS = frozenset(('avi', 'flv', 'mkv', 'mng', 'mov',
+VIDEO_EXTENSIONS = frozenset(('avi', 'flv', 'f4v', 'mkv', 'mng', 'mov',
                               'movie', 'mp4', 'mpe', 'mpeg',
                               'mpg', 'mpv', 'ogv', 'ts', 'wmv'))
 
