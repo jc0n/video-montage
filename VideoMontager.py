@@ -217,7 +217,7 @@ class VideoMontager(object):
 
         # whether or not to show a progress bar
         if self.progress:
-            progress = ProgressBar(maxval=vframes, widgets=[SimpleProgress(), Bar()])
+            progress = ProgressBar(maxval=self.thumbnail_count, widgets=[SimpleProgress(), Bar()])
             progress.start()
 
         # consume stdout output from ffmpeg and extract progress information
@@ -244,7 +244,7 @@ class VideoMontager(object):
                             "Unable to create thumbnail image %d." % index)
                 thumbnails.append(thumbnail_file)
             if self.progress:
-                progress.update(index)
+                progress.update(max(0, index - 1))
 
         if self.progress:
             progress.finish()
