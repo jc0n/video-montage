@@ -253,5 +253,4 @@ class VideoMontager(object):
         if ffmpeg.returncode != 0:
             raise subprocess.CalledProcessError('ffmpeg', ffmpeg.returncode)
 
-        assert len(thumbnails) == self.thumbnail_count
         return thumbnails
