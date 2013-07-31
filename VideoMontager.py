@@ -18,7 +18,7 @@ from progressbar import ProgressBar, SimpleProgress, Bar
 from which import which
 
 __author__ = 'John O\'Connor'
-__version__ = '0.1.6'
+__version__ = '0.1.7'
 
 __all__ = ('VideoMontager', )
 
